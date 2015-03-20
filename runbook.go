@@ -84,21 +84,19 @@ func (r *runBook) execute() (*runBookResponse, error) {
   return &runBookResponse{results}, nil
 }
 
-func execScript(s script) (result, error) {
+func execScript(s script) (r result, err error) {
   cmd := exec.Command(s.Command, s.Args...)
   var stdout bytes.Buffer
   var stderr bytes.Buffer
   cmd.Stdout = &stdout
   cmd.Stderr = &stderr
-  err := cmd.Run()
-  r := result{
-    Stdout: stdout.String(),
-    Stderr: stderr.String(),
-  }
+  err = cmd.Run()
   if err == nil {
     r.StatusCode = cmd.ProcessState.Sys().(syscall.WaitStatus).ExitStatus()
   }
-  return r, err
+  r.Stdout = stdout.String()
+  r.Stderr = stderr.String()
+  return
 }
 
 func getRunBookById(id string) (*runBook, error) {
