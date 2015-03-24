@@ -72,10 +72,10 @@ func (r *runBook) AddrIsAllowed(remoteIP net.IP) bool {
   return false
 }
 
-func (r *runBook) execute() (*runBookResponse, error) {
+func (r *runBook) execute(in input) (*runBookResponse, error) {
   results := make([]result, 0)
   for _, x := range r.Scripts {
-    r, err := execScript(x)
+    r, err := execScript(x, in)
     if err != nil {
       log.Println("ERROR :" + err.Error())
     }
@@ -84,12 +84,15 @@ func (r *runBook) execute() (*runBookResponse, error) {
   return &runBookResponse{results}, nil
 }
 
-func execScript(s script) (r result, err error) {
+func execScript(s script, in input) (r result, err error) {
   cmd := exec.Command(s.Command, s.Args...)
+  stdin, err := cmd.StdinPipe()
   var stdout bytes.Buffer
   var stderr bytes.Buffer
   cmd.Stdout = &stdout
   cmd.Stderr = &stderr
+  stdin.Write(in.Stdin)
+  stdin.Close()
   err = cmd.Run()
   if err == nil {
     r.StatusCode = cmd.ProcessState.Sys().(syscall.WaitStatus).ExitStatus()

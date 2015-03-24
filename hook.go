@@ -1,6 +1,7 @@
 package main
 
 import (
+  "bytes"
   "encoding/json"
   "io"
   "io/ioutil"
@@ -11,6 +12,29 @@ import (
 
   "github.com/gorilla/mux"
 )
+
+type input struct {
+  Stdin []byte
+}
+
+func gatherInput(r *http.Request) (i input, err error) {
+  headers := make(map[string]string, len(r.Header))
+  for k := range r.Header {
+    headers[k] = r.Header.Get(k)
+  }
+  body, err := ioutil.ReadAll(r.Body)
+  if err != nil && err != io.EOF {
+    log.Fatal(err)
+    return
+  }
+  h, err := json.Marshal(headers)
+  if err != nil {
+    log.Fatal(err)
+    return
+  }
+  i.Stdin = bytes.Join([][]byte{h, body}, []byte("\n"))
+  return
+}
 
 func hookHandler(w http.ResponseWriter, r *http.Request) {
   params := mux.Vars(r)
@@ -28,8 +52,8 @@ func hookHandler(w http.ResponseWriter, r *http.Request) {
     http.Error(w, "Not authorized.", http.StatusUnauthorized)
     return
   }
-  interoplatePOSTData(rb, r)
-  response, err := rb.execute()
+  in, err := gatherInput(r)
+  response, err := rb.execute(in)
   if err != nil {
     log.Println(err.Error())
     http.Error(w, err.Error(), 500)
