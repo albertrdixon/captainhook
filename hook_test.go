@@ -3,6 +3,7 @@ package main
 import (
   "bytes"
   "fmt"
+  log "github.com/Sirupsen/logrus"
   "io"
   "io/ioutil"
   "net/http"
@@ -57,11 +58,7 @@ var exposePostHandlerScript = `
 {
   "scripts": [
     {
-      "command": "grep",
-      "args": [
-        "test",
-        "-"
-      ]
+      "command": "cat"
     }
   ]
 }
@@ -70,7 +67,7 @@ var exposePostHandlerScript = `
 var exposePostResponseBody = `{
   "results": [
     {
-      "stdout": "{\"test\": \"test\"}\n",
+      "stdout": "{\"Accept-Encoding\":\"gzip\",\"Content-Length\":\"16\",\"User-Agent\":\"Go 1.1 package http\"} {\"test\": \"test\"}",
       "stderr": "",
       "status_code": 0
     }
@@ -137,4 +134,8 @@ func TestHookHandler(t *testing.T) {
       t.Errorf("wanted %s, got %s", tt.body, string(data))
     }
   }
+}
+
+func init() {
+  log.SetLevel(log.ErrorLevel)
 }

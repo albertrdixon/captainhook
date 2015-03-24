@@ -2,6 +2,7 @@ package main
 
 import (
   "encoding/json"
+  log "github.com/Sirupsen/logrus"
   "net"
   "testing"
 )
@@ -101,4 +102,8 @@ func TestInput(t *testing.T) {
       }
     }
   }
+}
+
+func init() {
+  log.SetLevel(log.ErrorLevel)
 }

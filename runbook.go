@@ -4,15 +4,18 @@ import (
   "bytes"
   "encoding/json"
   "fmt"
+  log "github.com/Sirupsen/logrus"
   "io/ioutil"
-  "log"
   "net"
   "os/exec"
   "syscall"
+  "time"
 )
 
 // runBook represents a collection of scripts.
 type runBook struct {
+  ID              string
+  ExecTime        time.Duration
   Scripts         []script `json:"scripts"`
   AllowedNetworks Networks `json:"allowedNetworks,omitempty"`
 }
@@ -72,13 +75,30 @@ func (r *runBook) AddrIsAllowed(remoteIP net.IP) bool {
   return false
 }
 
-func (r *runBook) execute(in input) (*runBookResponse, error) {
+func (r *runBook) trackTime(start time.Time) {
+  r.ExecTime = time.Since(start)
+}
+
+func (rb *runBook) execute(in input) (*runBookResponse, error) {
+  defer rb.trackTime(time.Now())
   results := make([]result, 0)
-  for _, x := range r.Scripts {
+  for _, x := range rb.Scripts {
+    log.WithFields(log.Fields{
+      "hook":   rb.ID,
+      "script": x.Command,
+    }).Debug("Executing script.")
     r, err := execScript(x, in)
     if err != nil {
-      log.Println("ERROR :" + err.Error())
+      log.WithFields(log.Fields{
+        "hook":   rb.ID,
+        "script": x.Command,
+        "error":  err,
+      }).Errorf("Script failed! STDERR: %s", r.Stderr)
     }
+    log.WithFields(log.Fields{
+      "hook":   rb.ID,
+      "script": x.Command,
+    }).Debugf("Script results: %+v", r)
     results = append(results, r)
   }
   return &runBookResponse{results}, nil
@@ -86,24 +106,35 @@ func (r *runBook) execute(in input) (*runBookResponse, error) {
 
 func execScript(s script, in input) (r result, err error) {
   cmd := exec.Command(s.Command, s.Args...)
+  log.WithField("script", s.Command).Debugf("Script: %+v", s)
   stdin, err := cmd.StdinPipe()
+  if err != nil {
+    log.WithFields(log.Fields{
+      "script": s.Command,
+      "error":  err,
+    }).Error("Unable to create STDIN pipe!")
+  }
   var stdout bytes.Buffer
   var stderr bytes.Buffer
   cmd.Stdout = &stdout
   cmd.Stderr = &stderr
+  log.WithField("script", s.Command).Debugf("Writing STDIN: %s", in.Stdin)
   stdin.Write(in.Stdin)
   stdin.Close()
   err = cmd.Run()
-  if err == nil {
-    r.StatusCode = cmd.ProcessState.Sys().(syscall.WaitStatus).ExitStatus()
-  }
   r.Stdout = stdout.String()
   r.Stderr = stderr.String()
+  if err == nil {
+    r.StatusCode = cmd.ProcessState.Sys().(syscall.WaitStatus).ExitStatus()
+  } else {
+    r.StatusCode = -1
+  }
   return
 }
 
 func getRunBookById(id string) (*runBook, error) {
   var r = new(runBook)
+  r.ID = id
   runBookPath := fmt.Sprintf("%s/%s.json", configdir, id)
   data, err := ioutil.ReadFile(runBookPath)
   if err != nil {
