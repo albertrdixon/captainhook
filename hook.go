@@ -8,6 +8,7 @@ import (
   "io/ioutil"
   "net"
   "net/http"
+  "os"
   "strings"
 
   "github.com/gorilla/mux"
@@ -41,6 +42,18 @@ func hookHandler(w http.ResponseWriter, r *http.Request) {
     "hook":    id,
     "address": r.RemoteAddr,
   }).Info("Recieved webhook.")
+
+  if auth {
+    if !authorize(r, os.Getenv("CPNHOOK_TOKEN")) {
+      log.WithFields(log.Fields{
+        "hook":    id,
+        "address": r.RemoteAddr,
+      }).Warn("Authentication Failure!")
+      http.Error(w, "Not authorized.", http.StatusUnauthorized)
+      return
+    }
+  }
+
   rb, err := NewRunBook(id)
   if err != nil {
     log.WithFields(log.Fields{
@@ -106,4 +119,12 @@ func hookHandler(w http.ResponseWriter, r *http.Request) {
     }
     w.Write(data)
   }
+}
+
+func authorize(r *http.Request, token string) bool {
+  user, _, ok := r.BasicAuth()
+  if !ok || user != token {
+    return false
+  }
+  return true
 }

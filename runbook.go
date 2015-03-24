@@ -79,27 +79,27 @@ func (r *runBook) trackTime(start time.Time) {
   r.ExecTime = time.Since(start)
 }
 
-func (rb *runBook) execute(in input) (*runBookResponse, error) {
-  defer rb.trackTime(time.Now())
+func (r *runBook) execute(in input) (*runBookResponse, error) {
+  defer r.trackTime(time.Now())
   results := make([]result, 0)
-  for _, x := range rb.Scripts {
+  for _, x := range r.Scripts {
     log.WithFields(log.Fields{
-      "hook":   rb.ID,
+      "hook":   r.ID,
       "script": x.Command,
     }).Debug("Executing script.")
-    r, err := execScript(x, in)
+    rs, err := execScript(x, in)
     if err != nil {
       log.WithFields(log.Fields{
-        "hook":   rb.ID,
+        "hook":   r.ID,
         "script": x.Command,
         "error":  err,
-      }).Errorf("Script failed! STDERR: %s", r.Stderr)
+      }).Errorf("Script failed! STDERR: %s", rs.Stderr)
     }
     log.WithFields(log.Fields{
-      "hook":   rb.ID,
+      "hook":   r.ID,
       "script": x.Command,
-    }).Debugf("Script results: %+v", r)
-    results = append(results, r)
+    }).Debugf("Script results: %+v", rs)
+    results = append(results, rs)
   }
   return &runBookResponse{results}, nil
 }
@@ -138,7 +138,11 @@ func getRunBookById(id string) (*runBook, error) {
   runBookPath := fmt.Sprintf("%s/%s.json", configdir, id)
   data, err := ioutil.ReadFile(runBookPath)
   if err != nil {
-    return r, fmt.Errorf("cannot read run book %s: %s", runBookPath, err)
+    log.WithFields(log.Fields{
+      "hook":  id,
+      "error": err,
+    }).Error("Failed to read runbook!")
+    return r, fmt.Errorf("failed to read runbook '%s.json'", id)
   }
   err = json.Unmarshal(data, r)
   if err != nil {

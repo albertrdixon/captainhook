@@ -15,6 +15,7 @@ var (
   listenAddr string
   logLevel   int
   logFile    string
+  auth       bool
 )
 
 func init() {
@@ -23,6 +24,7 @@ func init() {
   flag.StringVar(&listenAddr, "listen-addr", "127.0.0.1:8080", "http listen address")
   flag.IntVar(&logLevel, "v", 1, "log level (0:quiet 1:info/default 2:debug)")
   flag.StringVar(&logFile, "log", "", "log file (default: STDOUT)")
+  flag.BoolVar(&auth, "auth", true, "do basic authentication")
 }
 
 func main() {

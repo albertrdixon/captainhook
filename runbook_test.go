@@ -36,6 +36,8 @@ var allowedNetworksFailureScript = `
 var echoScript = script{Command: "cat"}
 
 func TestNetworkUnmarshalling(t *testing.T) {
+  log.SetLevel(log.ErrorLevel)
+
   r := runBook{}
   err := json.Unmarshal([]byte(allowedNetworksSuccessScript), &r)
   if err != nil {
@@ -53,6 +55,8 @@ func TestNetworkUnmarshalling(t *testing.T) {
 }
 
 func TestAddrIsAllowed(t *testing.T) {
+  log.SetLevel(log.ErrorLevel)
+
   testIPs := []struct {
     ip     net.IP
     result bool
@@ -80,6 +84,8 @@ func TestAddrIsAllowed(t *testing.T) {
 }
 
 func TestInput(t *testing.T) {
+  log.SetLevel(log.ErrorLevel)
+
   r := runBook{Scripts: []script{echoScript}}
   tests := []struct {
     in string
@@ -102,8 +108,4 @@ func TestInput(t *testing.T) {
       }
     }
   }
-}
-
-func init() {
-  log.SetLevel(log.ErrorLevel)
 }

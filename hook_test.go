@@ -67,7 +67,7 @@ var exposePostHandlerScript = `
 var exposePostResponseBody = `{
   "results": [
     {
-      "stdout": "{\"Accept-Encoding\":\"gzip\",\"Content-Length\":\"16\",\"User-Agent\":\"Go 1.1 package http\"} {\"test\": \"test\"}",
+      "stdout": "{\"Accept-Encoding\":\"gzip\",\"Authorization\":\"Basic Og==\",\"Content-Length\":\"16\",\"User-Agent\":\"Go 1.1 package http\"} {\"test\": \"test\"}",
       "stderr": "",
       "status_code": 0
     }
@@ -77,14 +77,18 @@ var exposePostResponseBody = `{
 var hookHanderTests = []struct {
   body       string
   echo       bool
+  auth       bool
+  token      string
   script     string
   statusCode int
   postBody   io.Reader
 }{
-  {"", false, hookHandlerScript, 200, nil},
-  {"Not authorized.\n", false, hookHandlerScriptDenied, 401, nil},
-  {hookResponseBody, true, hookHandlerScript, 200, nil},
-  {exposePostResponseBody, true, exposePostHandlerScript, 200, bytes.NewBuffer(data)},
+  {"", false, false, "", hookHandlerScript, 200, nil},
+  {"Not authorized.\n", false, false, "", hookHandlerScriptDenied, 401, nil},
+  {"Not authorized.\n", false, true, "bad", hookHandlerScript, 401, nil},
+  {hookResponseBody, true, false, "", hookHandlerScript, 200, nil},
+  {hookResponseBody, true, true, "good", hookHandlerScript, 200, nil},
+  {exposePostResponseBody, true, false, "", exposePostHandlerScript, 200, bytes.NewBuffer(data)},
 }
 
 func TestHookHandler(t *testing.T) {
@@ -94,6 +98,9 @@ func TestHookHandler(t *testing.T) {
   ts := httptest.NewServer(r)
   defer ts.Close()
 
+  log.SetLevel(log.ErrorLevel)
+  os.Setenv("CPNHOOK_TOKEN", "good")
+
   // Set configdir option
   tempdir := os.TempDir()
   configdir = tempdir
@@ -101,6 +108,8 @@ func TestHookHandler(t *testing.T) {
   for _, tt := range hookHanderTests {
     // Set the echo config option.
     echo = tt.echo
+    // Set the auth config option
+    auth = tt.auth
 
     f, err := os.Create(path.Join(tempdir, "test.json"))
     if err != nil {
@@ -115,6 +124,7 @@ func TestHookHandler(t *testing.T) {
     }
 
     req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", ts.URL, "test"), tt.postBody)
+    req.SetBasicAuth(tt.token, "")
     if err != nil {
       t.Errorf(err.Error())
     }
@@ -134,8 +144,4 @@ func TestHookHandler(t *testing.T) {
       t.Errorf("wanted %s, got %s", tt.body, string(data))
     }
   }
-}
-
-func init() {
-  log.SetLevel(log.ErrorLevel)
 }
