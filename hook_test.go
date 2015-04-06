@@ -27,7 +27,7 @@ var hookHandlerScript = `
   ]
 }`
 
-var hookHandlerScriptDenied = `
+var hookHandlerScriptNetDenied = `
 {
   "scripts": [
     {
@@ -39,6 +39,19 @@ var hookHandlerScriptDenied = `
   ],
   "allowedNetworks": [
     "10.0.0.0/8"
+  ]
+}`
+
+var hookHandlerScriptWithAuth = `
+{
+  "auth":"good_token",
+  "scripts": [
+    {
+      "command": "echo",
+      "args": [
+        "foo"
+      ]
+    }
   ]
 }`
 
@@ -77,18 +90,17 @@ var exposePostResponseBody = `{
 var hookHanderTests = []struct {
   body       string
   echo       bool
-  auth       bool
   token      string
   script     string
   statusCode int
   postBody   io.Reader
 }{
-  {"", false, false, "", hookHandlerScript, 200, nil},
-  {"Not authorized.\n", false, false, "", hookHandlerScriptDenied, 401, nil},
-  {"Not authorized.\n", false, true, "bad", hookHandlerScript, 401, nil},
-  {hookResponseBody, true, false, "", hookHandlerScript, 200, nil},
-  {hookResponseBody, true, true, "good", hookHandlerScript, 200, nil},
-  {exposePostResponseBody, true, false, "", exposePostHandlerScript, 200, bytes.NewBuffer(data)},
+  {"", false, "", hookHandlerScript, 200, nil},
+  {"Not authorized.\n", false, "", hookHandlerScriptNetDenied, 401, nil},
+  {"Not authorized.\n", false, "bad_token", hookHandlerScriptWithAuth, 401, nil},
+  {hookResponseBody, true, "", hookHandlerScript, 200, nil},
+  {hookResponseBody, true, "good_token", hookHandlerScriptWithAuth, 200, nil},
+  {exposePostResponseBody, true, "", exposePostHandlerScript, 200, bytes.NewBuffer(data)},
 }
 
 func TestHookHandler(t *testing.T) {
@@ -108,8 +120,6 @@ func TestHookHandler(t *testing.T) {
   for _, tt := range hookHanderTests {
     // Set the echo config option.
     echo = tt.echo
-    // Set the auth config option
-    auth = tt.auth
 
     f, err := os.Create(path.Join(tempdir, "test.json"))
     if err != nil {
