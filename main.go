@@ -9,6 +9,10 @@ import (
   "github.com/gorilla/mux"
 )
 
+const (
+  Version = "v0.1.1-alpha"
+)
+
 var (
   configdir  string
   echo       bool
@@ -57,7 +61,7 @@ func main() {
   log.WithFields(log.Fields{
     "listen":     listenAddr,
     "config-dir": configdir,
-  }).Info("=== Booting CaptainHook, matey! Arr!")
+  }).Infof("=== Booting CaptainHook %s, matey! Arr!", Version)
   if err := http.ListenAndServe(listenAddr, nil); err != nil {
     log.WithField("error", err).Fatal("Server Error!")
   }
