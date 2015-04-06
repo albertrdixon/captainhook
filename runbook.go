@@ -7,6 +7,7 @@ import (
   log "github.com/Sirupsen/logrus"
   "io/ioutil"
   "net"
+  "net/http"
   "os/exec"
   "syscall"
   "time"
@@ -18,6 +19,7 @@ type runBook struct {
   ExecTime        time.Duration
   Scripts         []script `json:"scripts"`
   AllowedNetworks Networks `json:"allowedNetworks,omitempty"`
+  AuthToken       string   `json:"auth,omitempty"`
 }
 
 type runBookResponse struct {
@@ -73,6 +75,18 @@ func (r *runBook) AddrIsAllowed(remoteIP net.IP) bool {
     }
   }
   return false
+}
+
+func (r *runBook) Authorized(req *http.Request) bool {
+  if r.AuthToken == "" {
+    return true
+  }
+
+  token, _, ok := req.BasicAuth()
+  if !ok || token != r.AuthToken {
+    return false
+  }
+  return true
 }
 
 func (r *runBook) trackTime(start time.Time) {
