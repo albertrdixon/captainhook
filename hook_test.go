@@ -1,17 +1,18 @@
 package main
 
 import (
-	"bytes"
-	"fmt"
-	"io"
-	"io/ioutil"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"path"
-	"testing"
+  "bytes"
+  "fmt"
+  log "github.com/Sirupsen/logrus"
+  "io"
+  "io/ioutil"
+  "net/http"
+  "net/http/httptest"
+  "os"
+  "path"
+  "testing"
 
-	"github.com/gorilla/mux"
+  "github.com/gorilla/mux"
 )
 
 var hookHandlerScript = `
@@ -26,7 +27,7 @@ var hookHandlerScript = `
   ]
 }`
 
-var hookHandlerScriptDenied = `
+var hookHandlerScriptNetDenied = `
 {
   "scripts": [
     {
@@ -38,6 +39,19 @@ var hookHandlerScriptDenied = `
   ],
   "allowedNetworks": [
     "10.0.0.0/8"
+  ]
+}`
+
+var hookHandlerScriptWithAuth = `
+{
+  "auth":"good_token",
+  "scripts": [
+    {
+      "command": "echo",
+      "args": [
+        "foo"
+      ]
+    }
   ]
 }`
 
@@ -57,10 +71,7 @@ var exposePostHandlerScript = `
 {
   "scripts": [
     {
-      "command": "echo",
-      "args": [
-        "{{POST}}"
-      ]
+      "command": "cat"
     }
   ]
 }
@@ -69,7 +80,7 @@ var exposePostHandlerScript = `
 var exposePostResponseBody = `{
   "results": [
     {
-      "stdout": "{\"test\": \"test\"}\n",
+      "stdout": "{\"Accept-Encoding\":\"gzip\",\"Authorization\":\"Basic Og==\",\"Content-Length\":\"16\",\"User-Agent\":\"Go 1.1 package http\"} {\"test\": \"test\"}",
       "stderr": "",
       "status_code": 0
     }
@@ -77,63 +88,70 @@ var exposePostResponseBody = `{
 }`
 
 var hookHanderTests = []struct {
-	body       string
-	echo       bool
-	script     string
-	statusCode int
-	postBody   io.Reader
+  body       string
+  echo       bool
+  token      string
+  script     string
+  statusCode int
+  postBody   io.Reader
 }{
-	{"", false, hookHandlerScript, 200, nil},
-	{"Not authorized.\n", false, hookHandlerScriptDenied, 401, nil},
-	{hookResponseBody, true, hookHandlerScript, 200, nil},
-	{exposePostResponseBody, true, exposePostHandlerScript, 200, bytes.NewBuffer(data)},
+  {"", false, "", hookHandlerScript, 200, nil},
+  {"Not authorized.\n", false, "", hookHandlerScriptNetDenied, 401, nil},
+  {"Not authorized.\n", false, "bad_token", hookHandlerScriptWithAuth, 401, nil},
+  {hookResponseBody, true, "", hookHandlerScript, 200, nil},
+  {hookResponseBody, true, "good_token", hookHandlerScriptWithAuth, 200, nil},
+  {exposePostResponseBody, true, "", exposePostHandlerScript, 200, bytes.NewBuffer(data)},
 }
 
 func TestHookHandler(t *testing.T) {
-	// Start a test server so we can test using the gorilla mux.
-	r := mux.NewRouter()
-	r.HandleFunc("/{id}", hookHandler).Methods("POST")
-	ts := httptest.NewServer(r)
-	defer ts.Close()
+  // Start a test server so we can test using the gorilla mux.
+  r := mux.NewRouter()
+  r.HandleFunc("/{id}", hookHandler).Methods("POST")
+  ts := httptest.NewServer(r)
+  defer ts.Close()
 
-	// Set configdir option
-	tempdir := os.TempDir()
-	configdir = tempdir
+  log.SetLevel(log.ErrorLevel)
+  os.Setenv("CPNHOOK_TOKEN", "good")
 
-	for _, tt := range hookHanderTests {
-		// Set the echo config option.
-		echo = tt.echo
+  // Set configdir option
+  tempdir := os.TempDir()
+  configdir = tempdir
 
-		f, err := os.Create(path.Join(tempdir, "test.json"))
-		if err != nil {
-			t.Errorf(err.Error())
-		}
-		defer os.Remove(f.Name())
-		defer f.Close()
+  for _, tt := range hookHanderTests {
+    // Set the echo config option.
+    echo = tt.echo
 
-		_, err = f.WriteString(tt.script)
-		if err != nil {
-			t.Errorf(err.Error())
-		}
+    f, err := os.Create(path.Join(tempdir, "test.json"))
+    if err != nil {
+      t.Errorf(err.Error())
+    }
+    defer os.Remove(f.Name())
+    defer f.Close()
 
-		req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", ts.URL, "test"), tt.postBody)
-		if err != nil {
-			t.Errorf(err.Error())
-		}
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Errorf(err.Error())
-		}
-		if resp.StatusCode != tt.statusCode {
-			t.Errorf("wanted %d, got %d", tt.statusCode, resp.StatusCode)
-		}
+    _, err = f.WriteString(tt.script)
+    if err != nil {
+      t.Errorf(err.Error())
+    }
 
-		data, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			t.Errorf(err.Error())
-		}
-		if string(data) != tt.body {
-			t.Errorf("wanted %s, got %s", tt.body, string(data))
-		}
-	}
+    req, err := http.NewRequest("POST", fmt.Sprintf("%s/%s", ts.URL, "test"), tt.postBody)
+    req.SetBasicAuth(tt.token, "")
+    if err != nil {
+      t.Errorf(err.Error())
+    }
+    resp, err := http.DefaultClient.Do(req)
+    if err != nil {
+      t.Errorf(err.Error())
+    }
+    if resp.StatusCode != tt.statusCode {
+      t.Errorf("wanted %d, got %d", tt.statusCode, resp.StatusCode)
+    }
+
+    data, err := ioutil.ReadAll(resp.Body)
+    if err != nil {
+      t.Errorf(err.Error())
+    }
+    if string(data) != tt.body {
+      t.Errorf("wanted %s, got %s", tt.body, string(data))
+    }
+  }
 }
